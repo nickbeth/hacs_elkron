@@ -32,8 +32,8 @@ class ElkronConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_USERNAME): str,
             vol.Required(CONF_PASSWORD): str,
             vol.Required(CONF_HOST): str,
-            vol.Required(AlarmControlPanelState.ARMED_AWAY, default="1,2,3,4,5"): str,
-            vol.Required(AlarmControlPanelState.ARMED_HOME, default="1"): str,
+            vol.Required(str(AlarmControlPanelState.ARMED_AWAY), default="1,2,3,4,5"): str,
+            vol.Required(str(AlarmControlPanelState.ARMED_HOME), default="1"): str,
         }
 
         if user_input is None:
