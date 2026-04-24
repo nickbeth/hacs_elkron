@@ -54,7 +54,7 @@ async def async_setup_entry(
     ]
 
     elkronalarm = ElkronAlarm(hass, name, username, password, host, states)
-    async_add_entities([elkronalarm])
+    async_add_entities([elkronalarm], update_before_add=True)
 
 
 class ElkronState:
