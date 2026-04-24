@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 
 from homeassistant.const import CONF_NAME, CONF_PASSWORD, CONF_USERNAME, CONF_HOST
 from homeassistant.components.alarm_control_panel import (
@@ -84,6 +85,7 @@ class ElkronAlarm(AlarmControlPanelEntity):
         self._password = password
         self._hostname = host
         self._state = None
+        self._ignore_poll_until = 0
 
         # Setup States
         self._states = []
@@ -109,6 +111,10 @@ class ElkronAlarm(AlarmControlPanelEntity):
 
     async def async_update(self):
         """Fetch the latest state."""
+        if time.time() < self._ignore_poll_until:
+            _LOGGER.debug("Ignoring Elkron alarm state update")
+            return
+        
         _LOGGER.debug("Updating Elkron alarm state...")
         await self._hass.async_add_executor_job(self._alarm.doLogin)
         _LOGGER.debug("Logged in to Elkron alarm")
@@ -130,8 +136,8 @@ class ElkronAlarm(AlarmControlPanelEntity):
 
         self._state = {"state": sysState, "info": sysInfo, "structure": structure}
         _LOGGER.debug("Updated alarm state: " + str(self._state))
-        _LOGGER.debug("Elkron alarm state update complete")
         self._attr_alarm_state = self._calculate_alarm_state(self._state)
+        _LOGGER.debug("Updated Elkron alarm state: " + str(self.alarm_state))
 
     @property
     def name(self):
@@ -184,13 +190,21 @@ class ElkronAlarm(AlarmControlPanelEntity):
             return None
 
         try:
+            self.set_poll_debounce()
+            self._attr_alarm_state = AlarmControlPanelState.DISARMING
+            self.async_write_ha_state()
+            
             await self._hass.async_add_executor_job(
                 self._alarm.doDeactivate, code, self._state["state"]["activezone"]
             )
+            # Optimistic state update
+            self._attr_alarm_state = AlarmControlPanelState.DISARMED
+            self.async_write_ha_state()
+            self.set_poll_debounce()
+            _LOGGER.debug("Optimistic Elkron alarm state update: " + str(self.alarm_state))
         except Exception as e:
             _LOGGER.warning("Failed to disarm alarm: " + str(e))
-
-        self.schedule_update_ha_state()
+            self._ignore_poll_until = 0
 
     async def async_alarm_arm_home(self, code=None):
         """Send arm hom command."""
@@ -211,13 +225,21 @@ class ElkronAlarm(AlarmControlPanelEntity):
             )
 
         try:
+            self.set_poll_debounce()
+            self._attr_alarm_state = AlarmControlPanelState.ARMING
+            self.async_write_ha_state()
+    
             await self._hass.async_add_executor_job(
                 self._alarm.doActivate, code, self._armed_home_state.zones
             )
+            # Optimistic state update
+            self._attr_alarm_state = AlarmControlPanelState.ARMED_HOME
+            self.async_write_ha_state()
+            self.set_poll_debounce()
+            _LOGGER.debug("Optimistic Elkron alarm state update: " + str(self.alarm_state))
         except Exception as e:
             _LOGGER.warning("Failed to arm alarm: " + str(e))
-
-        self.schedule_update_ha_state()
+            self._ignore_poll_until = 0
 
     async def async_alarm_arm_away(self, code=None):
         """Send arm away command."""
@@ -238,13 +260,24 @@ class ElkronAlarm(AlarmControlPanelEntity):
             )
 
         try:
+            self.set_poll_debounce()
+            self._attr_alarm_state = AlarmControlPanelState.ARMING
+            self.async_write_ha_state()
+
             await self._hass.async_add_executor_job(
                 self._alarm.doActivate, code, self._armed_away_state.zones
             )
+            # Optimistic state update
+            self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
+            self.async_write_ha_state()
+            self.set_poll_debounce()
+            _LOGGER.debug("Optimistic Elkron alarm state update: " + str(self.alarm_state))
         except Exception as e:
             _LOGGER.warning("Failed to arm alarm: " + str(e))
-
-        self.schedule_update_ha_state()
+            self._ignore_poll_until = 0
+            
+    def set_poll_debounce(self):
+        self._ignore_poll_until = time.time() + 10
 
     @cached_property
     def supported_features(self) -> AlarmControlPanelEntityFeature:
